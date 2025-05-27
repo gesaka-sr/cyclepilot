@@ -5,26 +5,28 @@ import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
 
-# --- Load config.yaml ---
+# --- LOAD CONFIG ---
 with open("config.yaml") as file:
     config = yaml.load(file, Loader=SafeLoader)
 
-# --- Authenticator setup ---
+# --- AUTHENTICATION SETUP ---
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
     config['cookie']['expiry_days'],
+    config['preauthorized']
 )
 
-name, authentication_status, username = authenticator.login(location="main")
+# --- LOGIN ---
+name, authentication_status, username = authenticator.login("Login", location="main")
 
 if authentication_status:
-    # Logged-in UI
     st.set_page_config(page_title="CyclePilot", layout="centered")
     st.title("🩸 CyclePilot - Period & Symptom Tracker")
 
     authenticator.logout("Logout", "sidebar")
+    st.sidebar.success(f"Welcome, {name} 👋")
 
     # --- LAST PERIOD DATE INPUT ---
     st.header("📅 Cycle Start Info")
@@ -43,7 +45,6 @@ if authentication_status:
 
     # --- SYMPTOM TRACKER ---
     st.header("📖 Daily Symptom Tracker")
-
     today = datetime.today().strftime("%B %d, %Y")
     st.subheader(f"🗓️ Entry for {today}")
 
@@ -83,7 +84,7 @@ if authentication_status:
         except FileNotFoundError:
             st.warning("No entries saved yet.")
 
-elif authentication_status == False:
+elif authentication_status is False:
     st.error("🚫 Incorrect username or password.")
-elif authentication_status == None:
+elif authentication_status is None:
     st.warning("👤 Please enter your username and password.")
