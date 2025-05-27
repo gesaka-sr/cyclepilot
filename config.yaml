@@ -12,5 +12,4 @@ cookie:
   name: session
   key: secret
   expiry_days: 30
-preauthorized:
-  emails: []
+
