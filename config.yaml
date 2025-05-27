@@ -1,0 +1,16 @@
+credentials:
+  usernames:
+    alice:
+      email: alice@example.com
+      name: Alice
+      password: 'pbkdf2:sha256:260000$Vn...'  # Example hashed password
+    bob:
+      email: bob@example.com
+      name: Bob
+      password: 'pbkdf2:sha256:260000$Xy...'
+cookie:
+  name: session
+  key: secret
+  expiry_days: 30
+preauthorized:
+  emails: []
