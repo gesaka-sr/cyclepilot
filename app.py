@@ -1,95 +1,90 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import streamlit_authenticator as stauth
+import yaml
+from yaml.loader import SafeLoader
 
-st.set_page_config(page_title="CyclePilot", layout="centered")
-st.title("🩸 CyclePilot - Period & Symptom Tracker")
+# --- Load config.yaml ---
+with open("config.yaml") as file:
+    config = yaml.load(file, Loader=SafeLoader)
 
-# --- LAST PERIOD DATE INPUT ---
-st.header("📅 Cycle Start Info")
-last_period = st.date_input("Select your last period start date:", value=datetime.today())
-cycle_length = st.slider("Average cycle length (days):", 21, 35, 28)
+# --- Authenticator setup ---
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days'],
+    config['preauthorized']
+)
 
-# Calculate predictions
-next_period = last_period + timedelta(days=cycle_length)
-ovulation = next_period - timedelta(days=14)
-fertile_start = ovulation - timedelta(days=2)
-fertile_end = ovulation + timedelta(days=2)
+name, authentication_status, username = authenticator.login("Login", "main")
 
-st.success(f"🩸 **Next Period** is estimated on: `{next_period.strftime('%B %d, %Y')}`")
-st.info(f"🌸 **Fertile Window**: `{fertile_start.strftime('%B %d')}` → `{fertile_end.strftime('%B %d')}`")
-st.warning(f"📍 **Ovulation Day**: `{ovulation.strftime('%B %d')}`")
+if authentication_status:
+    # Logged-in UI
+    st.set_page_config(page_title="CyclePilot", layout="centered")
+    st.title("🩸 CyclePilot - Period & Symptom Tracker")
 
-# --- DAILY SYMPTOM TRACKER ---
-st.header("📖 Daily Symptom Tracker")
+    authenticator.logout("Logout", "sidebar")
 
-today = datetime.today().strftime("%Y-%m-%d")
-st.subheader(f"🗓️ Entry for {today}")
+    # --- LAST PERIOD DATE INPUT ---
+    st.header("📅 Cycle Start Info")
+    last_period = st.date_input("Select your last period start date:", value=datetime.today())
+    cycle_length = st.slider("Average cycle length (days):", 21, 35, 28)
 
-# Flow & discharge
-flow = st.radio("How would you describe your flow today?", ["None", "Light", "Medium", "Heavy", "Very Heavy"])
-discharge_color = st.selectbox("Discharge color", ["None", "Clear", "White", "Yellow", "Brown", "Bloody"])
-discharge_texture = st.selectbox("Discharge texture", ["None", "Watery", "Sticky", "Creamy", "Egg white", "Clumpy"])
+    # Predict next period, ovulation, fertile window
+    next_period = last_period + timedelta(days=cycle_length)
+    ovulation = next_period - timedelta(days=14)
+    fertile_start = ovulation - timedelta(days=2)
+    fertile_end = ovulation + timedelta(days=2)
 
-# Mood, symptoms, temperature
-mood = st.selectbox("Your mood today", ["Happy", "Neutral", "Irritable", "Sad", "Anxious"])
-cramps = st.radio("Cramps?", ["None", "Mild", "Moderate", "Severe"])
-headache = st.radio("Headache?", ["No", "Yes"])
-temperature = st.number_input("Body Temperature (°C)", min_value=35.0, max_value=42.0, step=0.1)
+    st.success(f"🩸 **Next Period** is estimated on: `{next_period.strftime('%B %d, %Y')}`")
+    st.info(f"🌸 **Fertile Window**: `{fertile_start.strftime('%B %d')}` → `{fertile_end.strftime('%B %d')}`")
+    st.warning(f"📍 **Ovulation Day**: `{ovulation.strftime('%B %d')}`")
 
-# Save log
-if st.button("💾 Save Entry"):
-    new_entry = {
-        "Date": today,
-        "Flow": flow,
-        "Discharge_Color": discharge_color,
-        "Discharge_Texture": discharge_texture,
-        "Mood": mood,
-        "Cramps": cramps,
-        "Headache": headache,
-        "Temperature": temperature,
-    }
-    try:
-        df = pd.read_csv("cycle_log.csv")
-        df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
-    except FileNotFoundError:
-        df = pd.DataFrame([new_entry])
-    df.to_csv("cycle_log.csv", index=False)
-    st.success("✅ Entry saved!")
+    # --- SYMPTOM TRACKER ---
+    st.header("📖 Daily Symptom Tracker")
 
-# View logs and charts
-if st.checkbox("📊 Show Symptom Log & Trends"):
-    try:
-        df = pd.read_csv("cycle_log.csv")
-        st.subheader("📈 Logged Entries")
-        st.dataframe(df)
+    today = datetime.today().strftime("%B %d, %Y")
+    st.subheader(f"🗓️ Entry for {today}")
 
-        # Prepare data
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.sort_values("Date", inplace=True)
+    flow = st.radio("Flow level:", ["None", "Light", "Medium", "Heavy", "Very Heavy"])
+    discharge_color = st.selectbox("Discharge color", ["None", "Clear", "White", "Yellow", "Brown", "Bloody"])
+    discharge_texture = st.selectbox("Discharge texture", ["None", "Watery", "Sticky", "Creamy", "Egg white", "Clumpy"])
+    mood = st.selectbox("Mood today:", ["Happy", "Neutral", "Irritable", "Sad", "Anxious"])
+    cramps = st.radio("Cramps level:", ["None", "Mild", "Moderate", "Severe"])
+    headache = st.radio("Headache?", ["No", "Yes"])
+    temperature = st.number_input("Body Temperature (°C)", min_value=35.0, max_value=42.0, step=0.1)
 
-        # --- Mood trend ---
-        mood_map = {"Happy": 2, "Neutral": 1, "Irritable": -1, "Sad": -2, "Anxious": -3}
-        df["Mood_Score"] = df["Mood"].map(mood_map)
-        st.write("📉 Mood Trend")
-        st.line_chart(df.set_index("Date")["Mood_Score"])
+    if st.button("💾 Save Entry"):
+        new_entry = {
+            "User": username,
+            "Date": today,
+            "Flow": flow,
+            "Discharge_Color": discharge_color,
+            "Discharge_Texture": discharge_texture,
+            "Mood": mood,
+            "Cramps": cramps,
+            "Headache": headache,
+            "Temperature": temperature,
+        }
+        try:
+            df = pd.read_csv("cycle_log.csv")
+            df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
+        except FileNotFoundError:
+            df = pd.DataFrame([new_entry])
+        df.to_csv("cycle_log.csv", index=False)
+        st.success("✅ Entry saved!")
 
-        # --- Flow level ---
-        flow_map = {"None": 0, "Light": 1, "Medium": 2, "Heavy": 3, "Very Heavy": 4}
-        df["Flow_Score"] = df["Flow"].map(flow_map)
-        st.write("💧 Flow Intensity")
-        st.bar_chart(df.set_index("Date")["Flow_Score"])
+    if st.checkbox("📊 Show Symptom Log"):
+        try:
+            df = pd.read_csv("cycle_log.csv")
+            df_user = df[df["User"] == username]
+            st.dataframe(df_user)
+        except FileNotFoundError:
+            st.warning("No entries saved yet.")
 
-        # --- Temperature trend ---
-        st.write("🌡️ Temperature Trend")
-        st.line_chart(df.set_index("Date")["Temperature"])
-
-        # --- Cramps trend ---
-        cramps_map = {"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3}
-        df["Cramps_Score"] = df["Cramps"].map(cramps_map)
-        st.write("💥 Cramps Intensity")
-        st.area_chart(df.set_index("Date")["Cramps_Score"])
-
-    except FileNotFoundError:
-        st.warning("⚠️ No data yet. Save your first entry above!")
-
+elif authentication_status == False:
+    st.error("🚫 Incorrect username or password.")
+elif authentication_status == None:
+    st.warning("👤 Please enter your username and password.")
