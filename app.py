@@ -1,95 +1,66 @@
+# app.py
+
 import streamlit as st
+from datetime import datetime
 import pandas as pd
-from datetime import datetime, timedelta
+import yaml
+from yaml.loader import SafeLoader
+from modules.role_utils import get_user_role
+from modules.sexual_health import sexual_health_ui
+from modules.teleconsult import teleconsult_ui
+from modules.symptom_correlation import plus_features_ui
 
+# --- Load config ---
+with open("config.yaml") as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+# --- TEMP AUTH SKIPPED FOR TESTING ---
+username = "test_user"  # Simulated user
+user_role = get_user_role(username)  # free, lite, plus, admin
+
+# --- PAGE SETUP ---
 st.set_page_config(page_title="CyclePilot", layout="centered")
-st.title("🩸 CyclePilot - Period & Symptom Tracker")
+st.title("🩸 CyclePilot - Every Woman, Every Stage")
 
-# --- LAST PERIOD DATE INPUT ---
-st.header("📅 Cycle Start Info")
-last_period = st.date_input("Select your last period start date:", value=datetime.today())
-cycle_length = st.slider("Average cycle length (days):", 21, 35, 28)
+# --- NAVIGATION ---
+pages = {
+    "🩸 Period Tracker": "period",
+    "🛏️ Sexual Health Log": "sexual",
+    "🧬 Symptom Insights": "insights",
+    "🩺 Teleconsultation": "consult"
+}
+selection = st.sidebar.radio("📂 Navigate", list(pages.keys()))
+st.sidebar.success(f"Logged in as: `{username}` ({user_role})")
 
-# Calculate predictions
-next_period = last_period + timedelta(days=cycle_length)
-ovulation = next_period - timedelta(days=14)
-fertile_start = ovulation - timedelta(days=2)
-fertile_end = ovulation + timedelta(days=2)
+# --- PAGE ROUTING ---
+if pages[selection] == "period":
+    st.subheader("📅 Period Tracker")
+    from datetime import timedelta
 
-st.success(f"🩸 **Next Period** is estimated on: `{next_period.strftime('%B %d, %Y')}`")
-st.info(f"🌸 **Fertile Window**: `{fertile_start.strftime('%B %d')}` → `{fertile_end.strftime('%B %d')}`")
-st.warning(f"📍 **Ovulation Day**: `{ovulation.strftime('%B %d')}`")
+    last_period = st.date_input("Last period start date:", value=datetime.today())
+    cycle_length = st.slider("Cycle length (days):", 21, 35, 28)
 
-# --- DAILY SYMPTOM TRACKER ---
-st.header("📖 Daily Symptom Tracker")
+    next_period = last_period + timedelta(days=cycle_length)
+    ovulation = next_period - timedelta(days=14)
+    fertile_start = ovulation - timedelta(days=2)
+    fertile_end = ovulation + timedelta(days=2)
 
-today = datetime.today().strftime("%Y-%m-%d")
-st.subheader(f"🗓️ Entry for {today}")
+    st.success(f"🩸 Next period: `{next_period.strftime('%B %d, %Y')}`")
+    st.warning(f"📍 Ovulation: `{ovulation.strftime('%B %d')}`")
+    st.info(f"🌸 Fertile Window: `{fertile_start.strftime('%b %d')}` – `{fertile_end.strftime('%b %d')}`")
 
-# Flow & discharge
-flow = st.radio("How would you describe your flow today?", ["None", "Light", "Medium", "Heavy", "Very Heavy"])
-discharge_color = st.selectbox("Discharge color", ["None", "Clear", "White", "Yellow", "Brown", "Bloody"])
-discharge_texture = st.selectbox("Discharge texture", ["None", "Watery", "Sticky", "Creamy", "Egg white", "Clumpy"])
+elif pages[selection] == "sexual":
+    sexual_health_ui(username)
 
-# Mood, symptoms, temperature
-mood = st.selectbox("Your mood today", ["Happy", "Neutral", "Irritable", "Sad", "Anxious"])
-cramps = st.radio("Cramps?", ["None", "Mild", "Moderate", "Severe"])
-headache = st.radio("Headache?", ["No", "Yes"])
-temperature = st.number_input("Body Temperature (°C)", min_value=35.0, max_value=42.0, step=0.1)
+elif pages[selection] == "insights":
+    if user_role in ["plus", "admin"]:
+        plus_features_ui(username)
+    else:
+        st.error("🔒 Upgrade to Plus to unlock Symptom Insights.")
 
-# Save log
-if st.button("💾 Save Entry"):
-    new_entry = {
-        "Date": today,
-        "Flow": flow,
-        "Discharge_Color": discharge_color,
-        "Discharge_Texture": discharge_texture,
-        "Mood": mood,
-        "Cramps": cramps,
-        "Headache": headache,
-        "Temperature": temperature,
-    }
-    try:
-        df = pd.read_csv("cycle_log.csv")
-        df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
-    except FileNotFoundError:
-        df = pd.DataFrame([new_entry])
-    df.to_csv("cycle_log.csv", index=False)
-    st.success("✅ Entry saved!")
-
-# View logs and charts
-if st.checkbox("📊 Show Symptom Log & Trends"):
-    try:
-        df = pd.read_csv("cycle_log.csv")
-        st.subheader("📈 Logged Entries")
-        st.dataframe(df)
-
-        # Prepare data
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.sort_values("Date", inplace=True)
-
-        # --- Mood trend ---
-        mood_map = {"Happy": 2, "Neutral": 1, "Irritable": -1, "Sad": -2, "Anxious": -3}
-        df["Mood_Score"] = df["Mood"].map(mood_map)
-        st.write("📉 Mood Trend")
-        st.line_chart(df.set_index("Date")["Mood_Score"])
-
-        # --- Flow level ---
-        flow_map = {"None": 0, "Light": 1, "Medium": 2, "Heavy": 3, "Very Heavy": 4}
-        df["Flow_Score"] = df["Flow"].map(flow_map)
-        st.write("💧 Flow Intensity")
-        st.bar_chart(df.set_index("Date")["Flow_Score"])
-
-        # --- Temperature trend ---
-        st.write("🌡️ Temperature Trend")
-        st.line_chart(df.set_index("Date")["Temperature"])
-
-        # --- Cramps trend ---
-        cramps_map = {"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3}
-        df["Cramps_Score"] = df["Cramps"].map(cramps_map)
-        st.write("💥 Cramps Intensity")
-        st.area_chart(df.set_index("Date")["Cramps_Score"])
-
-    except FileNotFoundError:
-        st.warning("⚠️ No data yet. Save your first entry above!")
+elif pages[selection] == "consult":
+    if user_role in ["lite", "plus", "admin"]:
+        teleconsult_ui(username)
+    else:
+        st.warning("🔒 Available in Lite and Plus plans. Upgrade to access teleconsultation.")
 
